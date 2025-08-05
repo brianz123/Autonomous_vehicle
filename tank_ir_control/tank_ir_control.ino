@@ -9,18 +9,18 @@ const int IN3 = 11;  // Control pin 1 for motor B
 const int IN4 = 12;  // Control pin 2 for motor B
 
 // IR receiver pin
-const int IR_PIN = 2;
+const int IR_PIN = 3;
 
 // Motor speed (0-255)
 const int MOTOR_SPEED = 200;
 
 // IR codes (replace with codes from your own remote)
-#define IR_FORWARD  0xFF629D
-#define IR_BACKWARD 0xFFA857
-#define IR_LEFT     0xFF22DD
-#define IR_RIGHT    0xFFC23D
-#define IR_STOP     0xFF02FD
-
+#define IR_FORWARD  0x4243
+#define IR_BACKWARD 0x4232
+#define IR_LEFT     0x4234
+#define IR_RIGHT    0x4235
+#define IR_STOP     0x42C5
+#define IR_MODE		0x4247
 void setup() {
   pinMode(ENA, OUTPUT);
   pinMode(IN1, OUTPUT);
