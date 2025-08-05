@@ -1,28 +1,28 @@
 #include <IRremote.hpp>
 
 // Pin definitions for L298N motor driver
-const int ENA = 9;   // Enable pin for motor A
-const int IN1 = 8;   // Control pin 1 for motor A
+const int ENA = 10;   // Enable pin for motor A
+const int IN1 = 12;   // Control pin 1 for motor A
 const int IN2 = 7;   // Control pin 2 for motor A
-const int ENB = 10;  // Enable pin for motor B
-const int IN3 = 11;  // Control pin 1 for motor B
-const int IN4 = 12;  // Control pin 2 for motor B
+const int ENB = 9; // Enable pin for motor B
+const int IN3 = 8;  // Control pin 1 for motor B
+const int IN4 = 11;  // Control pin 2 for motor B
 
 // IR receiver pin
 const int IR_PIN = 3;
 
 // Motor speed (0-255)
-const int MOTOR_SPEED = 200;
+const int MOTOR_SPEED = 255;
 
 // IR codes (replace with codes from your own remote)
-#define IR_FORWARD  0x4243
+#define IR_FORWARD  0x4233
 #define IR_BACKWARD 0x4232
 #define IR_LEFT     0x4234
 #define IR_RIGHT    0x4235
-#define IR_STOP     0x42C5
+#define IR_STOP     0x425C
 #define IR_MODE		0x4247
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
   pinMode(ENA, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -61,9 +61,7 @@ void loop() {
         Serial.println(F("Command: STOP"));
         stopMotors();
         break;
-      default:
-        Serial.println(F("Command: UNKNOWN"));
-        break;
+
     }
 
     IrReceiver.resume(); // Receive the next value
