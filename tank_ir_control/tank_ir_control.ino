@@ -22,6 +22,7 @@ const int MOTOR_SPEED = 200;
 #define IR_STOP     0x42C5
 #define IR_MODE		0x4247
 void setup() {
+  Serial.begin(9600);
   pinMode(ENA, OUTPUT);
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
@@ -30,27 +31,38 @@ void setup() {
   pinMode(IN4, OUTPUT);
 
   IrReceiver.begin(IR_PIN, ENABLE_LED_FEEDBACK);
+  Serial.println(F("IR control ready"));
 }
 
 void loop() {
   if (IrReceiver.decode()) {
     uint32_t code = IrReceiver.decodedIRData.decodedRawData;
+    Serial.print(F("Received code: 0x"));
+    Serial.println(code, HEX);
 
     switch (code) {
       case IR_FORWARD:
+        Serial.println(F("Command: FORWARD"));
         moveForward();
         break;
       case IR_BACKWARD:
+        Serial.println(F("Command: BACKWARD"));
         moveBackward();
         break;
       case IR_LEFT:
+        Serial.println(F("Command: LEFT"));
         turnLeft();
         break;
       case IR_RIGHT:
+        Serial.println(F("Command: RIGHT"));
         turnRight();
         break;
       case IR_STOP:
+        Serial.println(F("Command: STOP"));
         stopMotors();
+        break;
+      default:
+        Serial.println(F("Command: UNKNOWN"));
         break;
     }
 
