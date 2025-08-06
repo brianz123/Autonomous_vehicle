@@ -2,11 +2,11 @@
 
 // Pin definitions for L298N motor driver
 const int ENA = 10;   // Enable pin for motor A
-const int IN1 = 12;   // Control pin 1 for motor A
-const int IN2 = 7;   // Control pin 2 for motor A
+const int IN3 = 12;   // Control pin 1 for motor A
+const int IN4 = 7;   // Control pin 2 for motor A
 const int ENB = 9; // Enable pin for motor B
-const int IN3 = 8;  // Control pin 1 for motor B
-const int IN4 = 11;  // Control pin 2 for motor B
+const int IN1 = 8;  // Control pin 1 for motor B
+const int IN2 = 11;  // Control pin 2 for motor B
 
 // IR receiver pin
 const int IR_PIN = 3;
