@@ -98,7 +98,7 @@ void handleCommand(const String &command) {
   }
 }
 
-void moveForward() {
+void moveBackward() {
   analogWrite(ENA, motorSpeed);
   analogWrite(ENB, motorSpeed);
   digitalWrite(IN1, HIGH);
@@ -107,7 +107,7 @@ void moveForward() {
   digitalWrite(IN4, LOW);
 }
 
-void moveBackward() {
+void moveForward() {
   analogWrite(ENA, motorSpeed);
   analogWrite(ENB, motorSpeed);
   digitalWrite(IN1, LOW);

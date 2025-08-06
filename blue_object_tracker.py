@@ -9,7 +9,7 @@ def main():
         raise RuntimeError("Could not open video device")
 
     # Define blue color range in HSV
-    lower_blue = np.array([100, 150, 50])
+    lower_blue = np.array([100, 200, 50])
     upper_blue = np.array([140, 255, 255])
 
     while True:
