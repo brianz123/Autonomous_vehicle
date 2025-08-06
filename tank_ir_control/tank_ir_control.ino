@@ -12,7 +12,7 @@ const int IN4 = 11;  // Control pin 2 for motor B
 const int IR_PIN = 3;
 
 // Motor speed (0-255)
-const int MOTOR_SPEED = 255;
+int motorSpeed = 255;
 
 // IR codes (replace with codes from your own remote)
 #define IR_FORWARD  0x4233
@@ -35,6 +35,12 @@ void setup() {
 }
 
 void loop() {
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    handleCommand(command);
+  }
+
   if (IrReceiver.decode()) {
     uint32_t code = IrReceiver.decodedIRData.decodedRawData;
     Serial.print(F("Received code: 0x"));
@@ -68,9 +74,33 @@ void loop() {
   }
 }
 
+void handleCommand(const String &command) {
+  if (command == "F") {
+    Serial.println(F("Command: FORWARD"));
+    moveForward();
+  } else if (command == "B") {
+    Serial.println(F("Command: BACKWARD"));
+    moveBackward();
+  } else if (command == "L") {
+    Serial.println(F("Command: LEFT"));
+    turnLeft();
+  } else if (command == "R") {
+    Serial.println(F("Command: RIGHT"));
+    turnRight();
+  } else if (command == "S") {
+    Serial.println(F("Command: STOP"));
+    stopMotors();
+  } else if (command.startsWith("V")) {
+    int spd = command.substring(1).toInt();
+    motorSpeed = constrain(spd, 0, 255);
+    Serial.print(F("Speed set to "));
+    Serial.println(motorSpeed);
+  }
+}
+
 void moveForward() {
-  analogWrite(ENA, MOTOR_SPEED);
-  analogWrite(ENB, MOTOR_SPEED);
+  analogWrite(ENA, motorSpeed);
+  analogWrite(ENB, motorSpeed);
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, HIGH);
@@ -78,8 +108,8 @@ void moveForward() {
 }
 
 void moveBackward() {
-  analogWrite(ENA, MOTOR_SPEED);
-  analogWrite(ENB, MOTOR_SPEED);
+  analogWrite(ENA, motorSpeed);
+  analogWrite(ENB, motorSpeed);
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, LOW);
@@ -87,8 +117,8 @@ void moveBackward() {
 }
 
 void turnLeft() {
-  analogWrite(ENA, MOTOR_SPEED);
-  analogWrite(ENB, MOTOR_SPEED);
+  analogWrite(ENA, motorSpeed);
+  analogWrite(ENB, motorSpeed);
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
   digitalWrite(IN3, HIGH);
@@ -96,8 +126,8 @@ void turnLeft() {
 }
 
 void turnRight() {
-  analogWrite(ENA, MOTOR_SPEED);
-  analogWrite(ENB, MOTOR_SPEED);
+  analogWrite(ENA, motorSpeed);
+  analogWrite(ENB, motorSpeed);
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
