@@ -9,14 +9,15 @@ def main():
         raise RuntimeError("Could not open video device")
 
     # Define blue color range in HSV
-    lower_blue = np.array([100, 200, 50])
+    lower_blue = np.array([100, 150, 50])
     upper_blue = np.array([140, 255, 255])
 
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-
+        brightness = -50  # positive = brighter, negative = darker
+        frame = cv2.convertScaleAbs(frame, alpha=1, beta=brightness)
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, lower_blue, upper_blue)
         mask = cv2.erode(mask, None, iterations=2)
@@ -28,7 +29,8 @@ def main():
             x, y, w, h = cv2.boundingRect(c)
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
-        cv2.imshow('Blue Object Tracker', frame)
+        cv2.imshow('Blue Object Tracker', mask)
+        cv2.imshow('camera raw view', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
