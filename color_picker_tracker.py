@@ -50,6 +50,7 @@ def get_trackbars():
         "val": cv2.getTrackbarPos("Val +/-", WINDOW_CONTROLS),
         "min_area": cv2.getTrackbarPos("Min Area", WINDOW_CONTROLS),
         "brightness": cv2.getTrackbarPos("Brightness", WINDOW_CONTROLS) - 100,
+        "mirror": cv2.getTrackbarPos("Mirror", WINDOW_CONTROLS),
     }
 
 
@@ -129,6 +130,7 @@ def main():
     cv2.createTrackbar("Val +/-", WINDOW_CONTROLS, 60, 255, nothing)
     cv2.createTrackbar("Min Area", WINDOW_CONTROLS, 500, 20000, nothing)
     cv2.createTrackbar("Brightness", WINDOW_CONTROLS, 100, 200, nothing)
+    cv2.createTrackbar("Mirror", WINDOW_CONTROLS, 0, 1, nothing)
 
     while True:
         ret, frame = cap.read()
@@ -136,6 +138,9 @@ def main():
             break
 
         settings = get_trackbars()
+        if settings["mirror"]:
+            frame = cv2.flip(frame, 1)
+
         frame = cv2.convertScaleAbs(frame, alpha=1, beta=settings["brightness"])
         frame_ref["frame"] = frame
         display = frame.copy()
