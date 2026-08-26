@@ -40,8 +40,9 @@ python color_picker_tracker.py
 
 Click the object color in the camera window. Use the HSV controls to widen or
 narrow the selected color range, and adjust `Min Area` to ignore small noisy
-spots. Turn on `Mirror` if you want the camera view flipped horizontally. Press
-`q` or `Esc` to quit.
+spots. Turn on `Mirror` if you want the camera view flipped horizontally.
+Settings are saved automatically when you quit and loaded the next time you run
+the tracker. Press `s` to save immediately, or press `q` or `Esc` to quit.
 
 ## Hardware Connection
 

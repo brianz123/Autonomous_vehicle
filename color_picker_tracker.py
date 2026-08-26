@@ -5,6 +5,9 @@ camera window to choose what to track, then adjust the HSV tolerance sliders in
 the controls window until the mask isolates the object cleanly.
 """
 
+import json
+from pathlib import Path
+
 import cv2
 import numpy as np
 
@@ -13,6 +16,17 @@ WINDOW_CAMERA = "Color Picker Tracker"
 WINDOW_MASK = "Tracked Mask"
 WINDOW_CONTROLS = "HSV Controls"
 TARGET_FPS = 5
+SETTINGS_FILE = Path(__file__).with_name("color_picker_tracker_settings.json")
+DEFAULT_SETTINGS = {
+    "hue": 10,
+    "sat": 60,
+    "val": 60,
+    "min_area": 500,
+    "brightness": 0,
+    "mirror": 0,
+    "selected_hsv": None,
+    "selected_bgr": None,
+}
 
 
 selected_hsv = None
@@ -25,6 +39,71 @@ def nothing(_value):
 
 def clamp(value, low, high):
     return max(low, min(high, value))
+
+
+def clamp_int(value, low, high, default):
+    try:
+        return int(clamp(int(value), low, high))
+    except (TypeError, ValueError):
+        return default
+
+
+def load_settings():
+    settings = DEFAULT_SETTINGS.copy()
+    if not SETTINGS_FILE.exists():
+        return settings
+
+    try:
+        saved_settings = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return settings
+
+    settings.update(
+        {
+            "hue": clamp_int(saved_settings.get("hue"), 0, 90, settings["hue"]),
+            "sat": clamp_int(saved_settings.get("sat"), 0, 255, settings["sat"]),
+            "val": clamp_int(saved_settings.get("val"), 0, 255, settings["val"]),
+            "min_area": clamp_int(
+                saved_settings.get("min_area"), 0, 20000, settings["min_area"]
+            ),
+            "brightness": clamp_int(
+                saved_settings.get("brightness"), -100, 100, settings["brightness"]
+            ),
+            "mirror": clamp_int(saved_settings.get("mirror"), 0, 1, settings["mirror"]),
+        }
+    )
+
+    for key in ("selected_hsv", "selected_bgr"):
+        value = saved_settings.get(key)
+        if isinstance(value, list) and len(value) == 3:
+            settings[key] = [clamp_int(component, 0, 255, 0) for component in value]
+
+    if settings["selected_hsv"] is not None:
+        settings["selected_hsv"][0] = clamp_int(settings["selected_hsv"][0], 0, 179, 0)
+
+    return settings
+
+
+def save_settings(settings):
+    global selected_hsv, selected_bgr
+
+    settings_to_save = {
+        **settings,
+        "selected_hsv": (
+            [int(component) for component in selected_hsv]
+            if selected_hsv is not None
+            else None
+        ),
+        "selected_bgr": (
+            [int(component) for component in selected_bgr]
+            if selected_bgr is not None
+            else None
+        ),
+    }
+
+    SETTINGS_FILE.write_text(
+        json.dumps(settings_to_save, indent=2) + "\n", encoding="utf-8"
+    )
 
 
 def on_mouse(event, x, y, _flags, frame_ref):
@@ -93,7 +172,7 @@ def build_hsv_mask(hsv_frame, target_hsv, tolerance):
 
 def draw_status(frame):
     if selected_hsv is None:
-        message = "Click an object color to start tracking. Press q to quit."
+        message = "Click an object color to track. Press s to save, q to quit."
     else:
         h, s, v = [int(component) for component in selected_hsv]
         b, g, r = [int(component) for component in selected_bgr]
@@ -113,6 +192,16 @@ def draw_status(frame):
 
 
 def main():
+    global selected_hsv, selected_bgr
+
+    saved_settings = load_settings()
+    if (
+        saved_settings["selected_hsv"] is not None
+        and saved_settings["selected_bgr"] is not None
+    ):
+        selected_hsv = np.array(saved_settings["selected_hsv"], dtype=np.uint8)
+        selected_bgr = np.array(saved_settings["selected_bgr"], dtype=np.uint8)
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         raise RuntimeError("Could not open video device")
@@ -125,12 +214,16 @@ def main():
     cv2.namedWindow(WINDOW_CONTROLS)
     cv2.setMouseCallback(WINDOW_CAMERA, on_mouse, frame_ref)
 
-    cv2.createTrackbar("Hue +/-", WINDOW_CONTROLS, 10, 90, nothing)
-    cv2.createTrackbar("Sat +/-", WINDOW_CONTROLS, 60, 255, nothing)
-    cv2.createTrackbar("Val +/-", WINDOW_CONTROLS, 60, 255, nothing)
-    cv2.createTrackbar("Min Area", WINDOW_CONTROLS, 500, 20000, nothing)
-    cv2.createTrackbar("Brightness", WINDOW_CONTROLS, 100, 200, nothing)
-    cv2.createTrackbar("Mirror", WINDOW_CONTROLS, 0, 1, nothing)
+    cv2.createTrackbar("Hue +/-", WINDOW_CONTROLS, saved_settings["hue"], 90, nothing)
+    cv2.createTrackbar("Sat +/-", WINDOW_CONTROLS, saved_settings["sat"], 255, nothing)
+    cv2.createTrackbar("Val +/-", WINDOW_CONTROLS, saved_settings["val"], 255, nothing)
+    cv2.createTrackbar(
+        "Min Area", WINDOW_CONTROLS, saved_settings["min_area"], 20000, nothing
+    )
+    cv2.createTrackbar(
+        "Brightness", WINDOW_CONTROLS, saved_settings["brightness"] + 100, 200, nothing
+    )
+    cv2.createTrackbar("Mirror", WINDOW_CONTROLS, saved_settings["mirror"], 1, nothing)
 
     while True:
         ret, frame = cap.read()
@@ -178,9 +271,12 @@ def main():
         cv2.imshow(WINDOW_MASK, mask)
 
         key = cv2.waitKey(frame_delay_ms) & 0xFF
-        if key == ord("q") or key == 27:
+        if key == ord("s"):
+            save_settings(get_trackbars())
+        elif key == ord("q") or key == 27:
             break
 
+    save_settings(get_trackbars())
     cap.release()
     cv2.destroyAllWindows()
 
