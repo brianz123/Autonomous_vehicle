@@ -6,16 +6,24 @@ the controls window until the mask isolates the object cleanly.
 """
 
 import json
+import time
 from pathlib import Path
 
 import cv2
 import numpy as np
+
+try:
+    import serial
+except ImportError:
+    serial = None
 
 
 WINDOW_CAMERA = "Color Picker Tracker"
 WINDOW_MASK = "Tracked Mask"
 WINDOW_CONTROLS = "HSV Controls"
 TARGET_FPS = 5
+SERIAL_PORT = "/dev/ttyACM0"
+SERIAL_BAUD = 115200
 SETTINGS_FILE = Path(__file__).with_name("color_picker_tracker_settings.json")
 DEFAULT_SETTINGS = {
     "hue": 10,
@@ -24,6 +32,8 @@ DEFAULT_SETTINGS = {
     "min_area": 500,
     "brightness": 0,
     "mirror": 0,
+    "motor_enable": 0,
+    "center_threshold": 30,
     "selected_hsv": None,
     "selected_bgr": None,
 }
@@ -70,6 +80,15 @@ def load_settings():
                 saved_settings.get("brightness"), -100, 100, settings["brightness"]
             ),
             "mirror": clamp_int(saved_settings.get("mirror"), 0, 1, settings["mirror"]),
+            "motor_enable": clamp_int(
+                saved_settings.get("motor_enable"), 0, 1, settings["motor_enable"]
+            ),
+            "center_threshold": clamp_int(
+                saved_settings.get("center_threshold"),
+                5,
+                300,
+                settings["center_threshold"],
+            ),
         }
     )
 
@@ -122,6 +141,29 @@ def on_mouse(event, x, y, _flags, frame_ref):
     selected_hsv = hsv_pixel[0][0]
 
 
+def open_motor_serial():
+    if serial is None:
+        return None, "pyserial not installed"
+
+    try:
+        motor_serial = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
+        time.sleep(2)
+        return motor_serial, f"connected {SERIAL_PORT}"
+    except serial.SerialException as exc:
+        return None, f"unavailable: {exc}"
+
+
+def send_motor_command(motor_serial, command, last_command):
+    if motor_serial is None or command == last_command:
+        return last_command
+
+    try:
+        motor_serial.write((command + "\n").encode("utf-8"))
+        return command
+    except serial.SerialException:
+        return last_command
+
+
 def get_trackbars():
     return {
         "hue": cv2.getTrackbarPos("Hue +/-", WINDOW_CONTROLS),
@@ -130,6 +172,8 @@ def get_trackbars():
         "min_area": cv2.getTrackbarPos("Min Area", WINDOW_CONTROLS),
         "brightness": cv2.getTrackbarPos("Brightness", WINDOW_CONTROLS) - 100,
         "mirror": cv2.getTrackbarPos("Mirror", WINDOW_CONTROLS),
+        "motor_enable": cv2.getTrackbarPos("Motor Enable", WINDOW_CONTROLS),
+        "center_threshold": cv2.getTrackbarPos("Center Threshold", WINDOW_CONTROLS),
     }
 
 
@@ -170,7 +214,38 @@ def build_hsv_mask(hsv_frame, target_hsv, tolerance):
     return cv2.inRange(hsv_frame, lower, upper)
 
 
-def draw_status(frame):
+def choose_motor_command(frame_shape, object_center, center_threshold):
+    if object_center is None:
+        return "S", "Searching"
+
+    frame_h, frame_w = frame_shape[:2]
+    frame_center = (frame_w // 2, frame_h // 2)
+    delta_x = object_center[0] - frame_center[0]
+    delta_y = object_center[1] - frame_center[1]
+
+    if abs(delta_x) > center_threshold:
+        return ("L", "Turn left") if delta_x < 0 else ("R", "Turn right")
+    if abs(delta_y) > center_threshold:
+        return ("F", "Move forward") if delta_y < 0 else ("B", "Move backward")
+    return "S", "Centered"
+
+
+def draw_center_threshold(frame, center_threshold):
+    frame_h, frame_w = frame.shape[:2]
+    center_x = frame_w // 2
+    center_y = frame_h // 2
+    cv2.rectangle(
+        frame,
+        (center_x - center_threshold, center_y - center_threshold),
+        (center_x + center_threshold, center_y + center_threshold),
+        (0, 255, 0),
+        2,
+    )
+    cv2.line(frame, (center_x - 10, center_y), (center_x + 10, center_y), (0, 255, 0), 1)
+    cv2.line(frame, (center_x, center_y - 10), (center_x, center_y + 10), (0, 255, 0), 1)
+
+
+def draw_status(frame, action, command, motor_enabled, motor_status):
     if selected_hsv is None:
         message = "Click an object color to track. Press s to save, q to quit."
     else:
@@ -178,7 +253,10 @@ def draw_status(frame):
         b, g, r = [int(component) for component in selected_bgr]
         message = f"Tracking HSV({h}, {s}, {v})  BGR({b}, {g}, {r})"
 
-    cv2.rectangle(frame, (0, 0), (frame.shape[1], 34), (0, 0, 0), -1)
+    motor_mode = "ON" if motor_enabled else "OFF"
+    action_message = f"Action: {action} ({command})  Motor: {motor_mode} - {motor_status}"
+
+    cv2.rectangle(frame, (0, 0), (frame.shape[1], 64), (0, 0, 0), -1)
     cv2.putText(
         frame,
         message,
@@ -186,6 +264,16 @@ def draw_status(frame):
         cv2.FONT_HERSHEY_SIMPLEX,
         0.6,
         (255, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        action_message,
+        (10, 52),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (0, 255, 255),
         2,
         cv2.LINE_AA,
     )
@@ -206,6 +294,8 @@ def main():
     if not cap.isOpened():
         raise RuntimeError("Could not open video device")
 
+    motor_serial, motor_status = open_motor_serial()
+    last_command = None
     frame_delay_ms = int(1000 / TARGET_FPS)
     frame_ref = {"frame": None}
 
@@ -224,6 +314,16 @@ def main():
         "Brightness", WINDOW_CONTROLS, saved_settings["brightness"] + 100, 200, nothing
     )
     cv2.createTrackbar("Mirror", WINDOW_CONTROLS, saved_settings["mirror"], 1, nothing)
+    cv2.createTrackbar(
+        "Motor Enable", WINDOW_CONTROLS, saved_settings["motor_enable"], 1, nothing
+    )
+    cv2.createTrackbar(
+        "Center Threshold",
+        WINDOW_CONTROLS,
+        saved_settings["center_threshold"],
+        300,
+        nothing,
+    )
 
     while True:
         ret, frame = cap.read()
@@ -238,6 +338,7 @@ def main():
         frame_ref["frame"] = frame
         display = frame.copy()
         mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+        object_center = None
 
         if selected_hsv is not None:
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -258,15 +359,26 @@ def main():
                 contour = max(contours, key=cv2.contourArea)
                 x, y, w, h = cv2.boundingRect(contour)
                 center = (x + w // 2, y + h // 2)
+                object_center = center
                 cv2.rectangle(display, (x, y), (x + w, y + h), (0, 0, 255), 2)
                 cv2.circle(display, center, 5, (0, 255, 255), -1)
 
         if selected_bgr is not None:
             color = tuple(int(component) for component in selected_bgr)
-            cv2.rectangle(display, (10, 44), (70, 104), color, -1)
-            cv2.rectangle(display, (10, 44), (70, 104), (255, 255, 255), 2)
+            cv2.rectangle(display, (10, 74), (70, 134), color, -1)
+            cv2.rectangle(display, (10, 74), (70, 134), (255, 255, 255), 2)
 
-        draw_status(display)
+        command, action = choose_motor_command(
+            display.shape, object_center, settings["center_threshold"]
+        )
+        motor_enabled = bool(settings["motor_enable"])
+        if motor_enabled:
+            last_command = send_motor_command(motor_serial, command, last_command)
+        elif last_command != "S":
+            last_command = send_motor_command(motor_serial, "S", last_command)
+
+        draw_center_threshold(display, settings["center_threshold"])
+        draw_status(display, action, command, motor_enabled, motor_status)
         cv2.imshow(WINDOW_CAMERA, display)
         cv2.imshow(WINDOW_MASK, mask)
 
@@ -277,6 +389,9 @@ def main():
             break
 
     save_settings(get_trackbars())
+    send_motor_command(motor_serial, "S", None)
+    if motor_serial is not None:
+        motor_serial.close()
     cap.release()
     cv2.destroyAllWindows()
 

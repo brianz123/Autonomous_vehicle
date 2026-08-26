@@ -34,13 +34,20 @@ Use `color_picker_tracker.py` to choose a color directly from the camera frame
 and track the largest matching object:
 
 ```bash
-pip install opencv-python numpy
+pip install opencv-python numpy pyserial
 python color_picker_tracker.py
 ```
 
 Click the object color in the camera window. Use the HSV controls to widen or
 narrow the selected color range, and adjust `Min Area` to ignore small noisy
 spots. Turn on `Mirror` if you want the camera view flipped horizontally.
+
+The tracker can also send motor commands to the Arduino over `/dev/ttyACM0`.
+Set `Motor Enable` to `1` to allow movement, or leave it at `0` while tuning.
+The camera view displays the current action and command. Adjust
+`Center Threshold` to change how close the object must be to the center before
+the rover stops.
+
 Settings are saved automatically when you quit and loaded the next time you run
 the tracker. Press `s` to save immediately, or press `q` or `Esc` to quit.
 
