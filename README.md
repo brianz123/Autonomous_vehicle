@@ -28,6 +28,20 @@ The script opens `/dev/ttyACM0` at 115200 baud. Adjust the port if your Arduino 
 
 Once running, type commands like `F`, `V150`, or `S` and press Enter to control the vehicle.
 
+## Camera Color Picker Tracker
+
+Use `color_picker_tracker.py` to choose a color directly from the camera frame
+and track the largest matching object:
+
+```bash
+pip install opencv-python numpy
+python color_picker_tracker.py
+```
+
+Click the object color in the camera window. Use the HSV controls to widen or
+narrow the selected color range, and adjust `Min Area` to ignore small noisy
+spots. Press `q` or `Esc` to quit.
+
 ## Hardware Connection
 
 Connect the Raspberry Pi to the Arduino via USB or a direct TX/RX serial connection (ensure common ground). The Arduino drives the motors through an L298N driver board.
