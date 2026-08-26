@@ -12,6 +12,7 @@ import numpy as np
 WINDOW_CAMERA = "Color Picker Tracker"
 WINDOW_MASK = "Tracked Mask"
 WINDOW_CONTROLS = "HSV Controls"
+TARGET_FPS = 5
 
 
 selected_hsv = None
@@ -115,6 +116,7 @@ def main():
     if not cap.isOpened():
         raise RuntimeError("Could not open video device")
 
+    frame_delay_ms = int(1000 / TARGET_FPS)
     frame_ref = {"frame": None}
 
     cv2.namedWindow(WINDOW_CAMERA)
@@ -170,7 +172,7 @@ def main():
         cv2.imshow(WINDOW_CAMERA, display)
         cv2.imshow(WINDOW_MASK, mask)
 
-        key = cv2.waitKey(1) & 0xFF
+        key = cv2.waitKey(frame_delay_ms) & 0xFF
         if key == ord("q") or key == 27:
             break
 
