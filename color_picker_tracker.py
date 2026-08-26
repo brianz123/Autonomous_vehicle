@@ -6,6 +6,7 @@ the controls window until the mask isolates the object cleanly.
 """
 
 import json
+import time
 from pathlib import Path
 
 import cv2
@@ -17,7 +18,6 @@ from motor_serial import DEFAULT_BAUD, DEFAULT_PORT, MotorSerial
 WINDOW_CAMERA = "Color Picker Tracker"
 WINDOW_MASK = "Tracked Mask"
 WINDOW_CONTROLS = "HSV Controls"
-TARGET_FPS = 5
 SERIAL_PORT = DEFAULT_PORT
 SERIAL_BAUD = DEFAULT_BAUD
 SETTINGS_FILE = Path(__file__).with_name("color_picker_tracker_settings.json")
@@ -30,6 +30,8 @@ DEFAULT_SETTINGS = {
     "mirror": 0,
     "motor_enable": 0,
     "center_threshold": 30,
+    "frame_rate": 5,
+    "motor_pulse_ms": 250,
     "selected_hsv": None,
     "selected_bgr": None,
 }
@@ -84,6 +86,15 @@ def load_settings():
                 5,
                 300,
                 settings["center_threshold"],
+            ),
+            "frame_rate": clamp_int(
+                saved_settings.get("frame_rate"), 1, 30, settings["frame_rate"]
+            ),
+            "motor_pulse_ms": clamp_int(
+                saved_settings.get("motor_pulse_ms"),
+                0,
+                3000,
+                settings["motor_pulse_ms"],
             ),
         }
     )
@@ -153,6 +164,8 @@ def get_trackbars():
         "mirror": cv2.getTrackbarPos("Mirror", WINDOW_CONTROLS),
         "motor_enable": cv2.getTrackbarPos("Motor Enable", WINDOW_CONTROLS),
         "center_threshold": cv2.getTrackbarPos("Center Threshold", WINDOW_CONTROLS),
+        "frame_rate": cv2.getTrackbarPos("Frame FPS", WINDOW_CONTROLS),
+        "motor_pulse_ms": cv2.getTrackbarPos("Pulse ms", WINDOW_CONTROLS),
     }
 
 
@@ -203,10 +216,34 @@ def choose_motor_command(frame_shape, object_center, center_threshold):
     delta_y = object_center[1] - frame_center[1]
 
     if abs(delta_x) > center_threshold:
-        return ("L", "Turn left") if delta_x < 0 else ("R", "Turn right")
+        return ("R", "Turn right") if delta_x < 0 else ("L", "Turn left")
     if abs(delta_y) > center_threshold:
         return ("F", "Move forward") if delta_y < 0 else ("B", "Move backward")
     return "S", "Centered"
+
+
+def update_motor_pulse(motors, command, motor_enabled, pulse_ms, pulse_state):
+    now = time.monotonic()
+    if not motor_enabled or command == "S":
+        motors.stop()
+        pulse_state["command"] = None
+        pulse_state["until"] = 0
+        return
+
+    pulse_seconds = pulse_ms / 1000
+    pulse_expired = pulse_state["command"] is not None and now >= pulse_state["until"]
+    command_changed = command != pulse_state["command"]
+
+    if pulse_expired:
+        motors.stop()
+        pulse_state["command"] = None
+        pulse_state["until"] = 0
+        return
+
+    if pulse_state["command"] is None or command_changed:
+        motors.send(command, force=True)
+        pulse_state["command"] = command
+        pulse_state["until"] = now + pulse_seconds
 
 
 def draw_center_threshold(frame, center_threshold):
@@ -224,7 +261,7 @@ def draw_center_threshold(frame, center_threshold):
     cv2.line(frame, (center_x, center_y - 10), (center_x, center_y + 10), (0, 255, 0), 1)
 
 
-def draw_status(frame, action, command, motor_enabled, motor_status):
+def draw_status(frame, action, command, motor_enabled, motor_status, settings):
     if selected_hsv is None:
         message = "Click an object color to track. Press s to save, q to quit."
     else:
@@ -233,9 +270,13 @@ def draw_status(frame, action, command, motor_enabled, motor_status):
         message = f"Tracking HSV({h}, {s}, {v})  BGR({b}, {g}, {r})"
 
     motor_mode = "ON" if motor_enabled else "OFF"
-    action_message = f"Action: {action} ({command})  Motor: {motor_mode} - {motor_status}"
+    action_message = f"Action: {action} ({command})  Motor: {motor_mode}"
+    timing_message = (
+        f"{motor_status}  FPS: {max(1, settings['frame_rate'])}  "
+        f"Pulse: {settings['motor_pulse_ms']}ms"
+    )
 
-    cv2.rectangle(frame, (0, 0), (frame.shape[1], 64), (0, 0, 0), -1)
+    cv2.rectangle(frame, (0, 0), (frame.shape[1], 94), (0, 0, 0), -1)
     cv2.putText(
         frame,
         message,
@@ -250,6 +291,16 @@ def draw_status(frame, action, command, motor_enabled, motor_status):
         frame,
         action_message,
         (10, 52),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (0, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        timing_message,
+        (10, 81),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.6,
         (0, 255, 255),
@@ -274,7 +325,7 @@ def main():
         raise RuntimeError("Could not open video device")
 
     motors = open_motor_serial()
-    frame_delay_ms = int(1000 / TARGET_FPS)
+    pulse_state = {"command": None, "until": 0}
     frame_ref = {"frame": None}
 
     cv2.namedWindow(WINDOW_CAMERA)
@@ -301,6 +352,12 @@ def main():
         saved_settings["center_threshold"],
         300,
         nothing,
+    )
+    cv2.createTrackbar(
+        "Frame FPS", WINDOW_CONTROLS, saved_settings["frame_rate"], 30, nothing
+    )
+    cv2.createTrackbar(
+        "Pulse ms", WINDOW_CONTROLS, saved_settings["motor_pulse_ms"], 3000, nothing
     )
 
     while True:
@@ -343,23 +400,27 @@ def main():
 
         if selected_bgr is not None:
             color = tuple(int(component) for component in selected_bgr)
-            cv2.rectangle(display, (10, 74), (70, 134), color, -1)
-            cv2.rectangle(display, (10, 74), (70, 134), (255, 255, 255), 2)
+            cv2.rectangle(display, (10, 104), (70, 164), color, -1)
+            cv2.rectangle(display, (10, 104), (70, 164), (255, 255, 255), 2)
 
         command, action = choose_motor_command(
             display.shape, object_center, settings["center_threshold"]
         )
         motor_enabled = bool(settings["motor_enable"])
-        if motor_enabled:
-            motors.send(command)
-        else:
-            motors.stop()
+        update_motor_pulse(
+            motors,
+            command,
+            motor_enabled,
+            settings["motor_pulse_ms"],
+            pulse_state,
+        )
 
         draw_center_threshold(display, settings["center_threshold"])
-        draw_status(display, action, command, motor_enabled, motors.status)
+        draw_status(display, action, command, motor_enabled, motors.status, settings)
         cv2.imshow(WINDOW_CAMERA, display)
         cv2.imshow(WINDOW_MASK, mask)
 
+        frame_delay_ms = int(1000 / max(1, settings["frame_rate"]))
         key = cv2.waitKey(frame_delay_ms) & 0xFF
         if key == ord("s"):
             save_settings(get_trackbars())

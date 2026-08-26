@@ -56,7 +56,9 @@ The tracker can also send motor commands to the Arduino over `/dev/ttyACM0`.
 Set `Motor Enable` to `1` to allow movement, or leave it at `0` while tuning.
 The camera view displays the current action and command. Adjust
 `Center Threshold` to change how close the object must be to the center before
-the rover stops.
+the rover stops. Adjust `Frame FPS` to control how often the camera loop runs.
+Adjust `Pulse ms` to control how long each motor correction runs before the
+tracker sends stop.
 
 Settings are saved automatically when you quit and loaded the next time you run
 the tracker. Press `s` to save immediately, or press `q` or `Esc` to quit.
