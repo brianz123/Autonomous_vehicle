@@ -28,6 +28,16 @@ The script opens `/dev/ttyACM0` at 115200 baud. Adjust the port if your Arduino 
 
 Once running, type commands like `F`, `V150`, or `S` and press Enter to control the vehicle.
 
+To verify the motors before using camera tracking, run:
+
+```bash
+python motor_test.py --speed 180
+```
+
+Use `F`, `B`, `L`, `R`, and `S` to test individual commands. Type `T` to run a
+short timed test of each direction, and `Q` to quit. The Pi sends these commands
+over serial to the Arduino; the Arduino controls the L298N motor pins.
+
 ## Camera Color Picker Tracker
 
 Use `color_picker_tracker.py` to choose a color directly from the camera frame

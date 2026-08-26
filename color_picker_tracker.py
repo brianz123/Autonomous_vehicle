@@ -6,24 +6,20 @@ the controls window until the mask isolates the object cleanly.
 """
 
 import json
-import time
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-try:
-    import serial
-except ImportError:
-    serial = None
+from motor_serial import DEFAULT_BAUD, DEFAULT_PORT, MotorSerial
 
 
 WINDOW_CAMERA = "Color Picker Tracker"
 WINDOW_MASK = "Tracked Mask"
 WINDOW_CONTROLS = "HSV Controls"
 TARGET_FPS = 5
-SERIAL_PORT = "/dev/ttyACM0"
-SERIAL_BAUD = 115200
+SERIAL_PORT = DEFAULT_PORT
+SERIAL_BAUD = DEFAULT_BAUD
 SETTINGS_FILE = Path(__file__).with_name("color_picker_tracker_settings.json")
 DEFAULT_SETTINGS = {
     "hue": 10,
@@ -142,26 +138,9 @@ def on_mouse(event, x, y, _flags, frame_ref):
 
 
 def open_motor_serial():
-    if serial is None:
-        return None, "pyserial not installed"
-
-    try:
-        motor_serial = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=1)
-        time.sleep(2)
-        return motor_serial, f"connected {SERIAL_PORT}"
-    except serial.SerialException as exc:
-        return None, f"unavailable: {exc}"
-
-
-def send_motor_command(motor_serial, command, last_command):
-    if motor_serial is None or command == last_command:
-        return last_command
-
-    try:
-        motor_serial.write((command + "\n").encode("utf-8"))
-        return command
-    except serial.SerialException:
-        return last_command
+    motors = MotorSerial(SERIAL_PORT, SERIAL_BAUD)
+    motors.connect()
+    return motors
 
 
 def get_trackbars():
@@ -294,8 +273,7 @@ def main():
     if not cap.isOpened():
         raise RuntimeError("Could not open video device")
 
-    motor_serial, motor_status = open_motor_serial()
-    last_command = None
+    motors = open_motor_serial()
     frame_delay_ms = int(1000 / TARGET_FPS)
     frame_ref = {"frame": None}
 
@@ -373,12 +351,12 @@ def main():
         )
         motor_enabled = bool(settings["motor_enable"])
         if motor_enabled:
-            last_command = send_motor_command(motor_serial, command, last_command)
-        elif last_command != "S":
-            last_command = send_motor_command(motor_serial, "S", last_command)
+            motors.send(command)
+        else:
+            motors.stop()
 
         draw_center_threshold(display, settings["center_threshold"])
-        draw_status(display, action, command, motor_enabled, motor_status)
+        draw_status(display, action, command, motor_enabled, motors.status)
         cv2.imshow(WINDOW_CAMERA, display)
         cv2.imshow(WINDOW_MASK, mask)
 
@@ -389,9 +367,7 @@ def main():
             break
 
     save_settings(get_trackbars())
-    send_motor_command(motor_serial, "S", None)
-    if motor_serial is not None:
-        motor_serial.close()
+    motors.close()
     cap.release()
     cv2.destroyAllWindows()
 
